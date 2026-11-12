@@ -1,0 +1,2814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marwadi University ICT - Smart Attendance & Activity System</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel Standalone for JSX compilation in the browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Lucide Icons (Vanilla JS UMD) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-[#090d16] text-slate-100 font-sans antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- HELPER COMPONENT TO RENDER LUCIDE ICONS IN REACT ---
+    function createLucideIcon(iconName) {
+      return function LucideIcon({ className = "" }) {
+        const spanRef = useRef(null);
+        useEffect(() => {
+          if (spanRef.current && window.lucide && window.lucide.icons[iconName]) {
+            const svg = window.lucide.createElement(window.lucide.icons[iconName]);
+            if (className) {
+              svg.setAttribute("class", className);
+            }
+            spanRef.current.innerHTML = "";
+            spanRef.current.appendChild(svg);
+          }
+        }, [className]);
+
+        return <span ref={spanRef} className="inline-flex items-center justify-center shrink-0" />;
+      };
+    }
+
+    const User = createLucideIcon('User');
+    const Lock = createLucideIcon('Lock');
+    const Eye = createLucideIcon('Eye');
+    const EyeOff = createLucideIcon('EyeOff');
+    const QrCode = createLucideIcon('QrCode');
+    const Camera = createLucideIcon('Camera');
+    const CheckCircle = createLucideIcon('CheckCircle');
+    const AlertTriangle = createLucideIcon('AlertTriangle');
+    const BookOpen = createLucideIcon('BookOpen');
+    const Calendar = createLucideIcon('Calendar');
+    const Clock = createLucideIcon('Clock');
+    const LogOut = createLucideIcon('LogOut');
+    const Plus = createLucideIcon('Plus');
+    const Shield = createLucideIcon('Shield');
+    const GraduationCap = createLucideIcon('GraduationCap');
+    const Award = createLucideIcon('Award');
+    const FileText = createLucideIcon('FileText');
+    const Upload = createLucideIcon('Upload');
+    const BarChart2 = createLucideIcon('BarChart2');
+    const Users = createLucideIcon('Users');
+    const Bell = createLucideIcon('Bell');
+    const Check = createLucideIcon('Check');
+    const ChevronRight = createLucideIcon('ChevronRight');
+    const Trash2 = createLucideIcon('Trash2');
+    const Key = createLucideIcon('Key');
+    const Video = createLucideIcon('Video');
+    const HelpCircle = createLucideIcon('HelpCircle');
+    const SwitchCamera = createLucideIcon('SwitchCamera');
+    const Layers = createLucideIcon('Layers');
+    const AlertCircle = createLucideIcon('AlertCircle');
+    const UserCheck = createLucideIcon('UserCheck');
+    const Sliders = createLucideIcon('Sliders');
+    const FileCheck = createLucideIcon('FileCheck');
+    const MapPin = createLucideIcon('MapPin');
+    const Zap = createLucideIcon('Zap');
+    const Sparkles = createLucideIcon('Sparkles');
+    const Gauge = createLucideIcon('Gauge');
+    const FileCode2 = createLucideIcon('FileCode2');
+    const CalendarCheck = createLucideIcon('CalendarCheck');
+    const Download = createLucideIcon('Download');
+    const Edit3 = createLucideIcon('Edit3');
+
+    // --- REAL FACIAL BIOMETRIC VISUAL FINGERPRINT & SIMILARITY HELPER ---
+    // Computes an 8x8 luminance/color signature from any video frame or enrolled image
+    function computeImageBiometricVector(sourceEl) {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 16;
+        canvas.height = 16;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(sourceEl, 0, 0, 16, 16);
+        const data = ctx.getImageData(0, 0, 16, 16).data;
+        const vec = [];
+        for (let i = 0; i < data.length; i += 4) {
+          // Normalized RGB + luminance channels
+          vec.push(data[i] / 255, data[i + 1] / 255, data[i + 2] / 255);
+        }
+        return vec;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function computeCosineSimilarity(vecA, vecB) {
+      if (!vecA || !vecB || vecA.length !== vecB.length) return null;
+      let dot = 0, magA = 0, magB = 0;
+      for (let i = 0; i < vecA.length; i++) {
+        dot += vecA[i] * vecB[i];
+        magA += vecA[i] * vecA[i];
+        magB += vecB[i] * vecB[i];
+      }
+      if (magA === 0 || magB === 0) return null;
+      return dot / (Math.sqrt(magA) * Math.sqrt(magB));
+    }
+
+    // --- UNIQUE PER-STUDENT QR MATRIX GENERATOR ---
+    // Generates a distinct 13x13 QR code matrix uniquely tied to each student's roll/ID and token
+    function UniqueStudentQrMatrix({ value, size = 128, className = "" }) {
+      const gridSize = 13;
+      let hash = 2166136261;
+      for (let i = 0; i < value.length; i++) {
+        hash ^= value.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+
+      const isFinder = (r, c) => {
+        if (r < 4 && c < 4) {
+          if (r === 3 || c === 3) return false;
+          return r === 0 || r === 2 || c === 0 || c === 2 || (r === 1 && c === 1);
+        }
+        if (r < 4 && c >= gridSize - 4) {
+          const lc = c - (gridSize - 4);
+          if (r === 3 || lc === 0) return false;
+          return r === 0 || r === 2 || lc === 1 || lc === 3 || (r === 1 && lc === 2);
+        }
+        if (r >= gridSize - 4 && c < 4) {
+          const lr = r - (gridSize - 4);
+          if (lr === 0 || c === 3) return false;
+          return lr === 1 || lr === 3 || c === 0 || c === 2 || (lr === 2 && c === 1);
+        }
+        return null;
+      };
+
+      const cells = [];
+      let seed = hash >>> 0;
+      for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+          const finderVal = isFinder(r, c);
+          let filled = false;
+          if (finderVal !== null) {
+            filled = finderVal;
+          } else {
+            seed = (seed * 1664525 + 1013904223) >>> 0;
+            filled = ((seed >>> 16) & 1) === 1;
+          }
+          if (filled) {
+            cells.push(<rect key={`${r}-${c}`} x={c} y={r} width="1" height="1" fill="#0f172a" />);
+          }
+        }
+      }
+
+      return (
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${gridSize} ${gridSize}`}
+          className={className}
+          shapeRendering="crispEdges"
+        >
+          <rect x="0" y="0" width={gridSize} height={gridSize} fill="#ffffff" />
+          {cells}
+        </svg>
+      );
+    }
+
+    // --- INITIAL DATA & USER ACCOUNTS ---
+    const INITIAL_USERS = [
+      // Students
+      {
+        id: '92500133046',
+        name: 'M. Madhu Mohan Kumar',
+        email: 'madhu.kumar9250@marwadi.edu',
+        role: 'student',
+        pass: 'Madhu@123',
+        dept: 'ICT Sem 3 - Div A',
+        roll: '92500133046',
+        faceSignature: 'BIO-FACE-33046-9A8F',
+        faceVector: null,
+        isRealEnrolled: false,
+        photo: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=200'
+      },
+      {
+        id: '92500133047',
+        name: 'M. Govardhan Reddy',
+        email: 'govardhan.reddy@marwadi.edu',
+        role: 'student',
+        pass: 'Govardhan@123',
+        dept: 'ICT Sem 3 - Div A',
+        roll: '92500133047',
+        faceSignature: 'BIO-FACE-33047-4C2E',
+        faceVector: null,
+        isRealEnrolled: false,
+        photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200'
+      },
+      {
+        id: '92500133026',
+        name: 'M. Shivanag',
+        email: 'shivanag.m@marwadi.edu',
+        role: 'student',
+        pass: 'Shivanag@123',
+        dept: 'ICT Sem 3 - Div B',
+        roll: '92500133026',
+        faceSignature: 'BIO-FACE-33026-7D1B',
+        faceVector: null,
+        isRealEnrolled: false,
+        photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200'
+      },
+      {
+        id: '92500133034',
+        name: 'K. Preetham',
+        email: 'preetham.k@marwadi.edu',
+        role: 'student',
+        pass: 'Preetham@123',
+        dept: 'ICT Sem 3 - Div B',
+        roll: '92500133034',
+        faceSignature: 'BIO-FACE-33034-2E9D',
+        faceVector: null,
+        isRealEnrolled: false,
+        photo: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=200'
+      },
+
+      // Faculty
+      { id: 'FAC-102', name: 'Prof. R. K. Sharma', email: 'prof.sharma@marwadi.edu', role: 'faculty', pass: 'Sharma@123', dept: 'Python Programming', subject: 'PWP', photo: null },
+      { id: 'FAC01', name: 'Prof. Kawal Kaur', email: 'pwp@marwadi.edu', role: 'faculty', pass: 'Kawal@123', dept: 'Python Web Programming', subject: 'PWP', photo: null },
+      { id: 'FAC02', name: 'Prof. Biswajit', email: 'dmgt@marwadi.edu', role: 'faculty', pass: 'Biswajit@123', dept: 'Discrete Math & Graph Theory', subject: 'DMGT', photo: null },
+      { id: 'FAC03', name: 'Prof. Vijay Dubey', email: 'coa@marwadi.edu', role: 'faculty', pass: 'Vijay@123', dept: 'Computer Architecture', subject: 'COA', photo: null },
+      { id: 'FAC04', name: 'Prof. Alam', email: 'dsc@marwadi.edu', role: 'faculty', pass: 'Alam@123', dept: 'Data Structures in C', subject: 'DSC', photo: null },
+
+      // Admin
+      { id: 'ADMIN-01', name: 'Class Coordinator (HOD)', email: 'admin.ict@marwadi.edu', role: 'admin', pass: 'Admin@123', dept: 'ICT Department Head', roll: 'ADMIN-01', photo: null }
+    ];
+
+    const INITIAL_RESULTS = {
+      '92500133046': { sgpa: { 'Sem 1': 8.4, 'Sem 2': 8.6, 'Sem 3': 8.9 }, cgpa: 8.63, backlogs: 0, subjects: { PWP: 'AA', DMGT: 'AB', COA: 'AA', DSC: 'BB' } },
+      '92500133047': { sgpa: { 'Sem 1': 7.8, 'Sem 2': 8.2, 'Sem 3': 8.0 }, cgpa: 8.00, backlogs: 0, subjects: { PWP: 'AB', DMGT: 'BB', COA: 'AA', DSC: 'AB' } },
+      '92500133026': { sgpa: { 'Sem 1': 6.5, 'Sem 2': 6.8, 'Sem 3': 6.2 }, cgpa: 6.50, backlogs: 1, subjects: { PWP: 'BC', DMGT: 'FF', COA: 'CC', DSC: 'BC' } },
+      '92500133034': { sgpa: { 'Sem 1': 9.0, 'Sem 2': 9.2, 'Sem 3': 9.4 }, cgpa: 9.20, backlogs: 0, subjects: { PWP: 'AA', DMGT: 'AA', COA: 'AA', DSC: 'AA' } }
+    };
+
+    const INITIAL_ATTENDANCE = {
+      '92500133046': { PWP: { present: 28, total: 30 }, DMGT: { present: 25, total: 28 }, COA: { present: 26, total: 26 }, DSC: { present: 24, total: 27 } },
+      '92500133047': { PWP: { present: 26, total: 30 }, DMGT: { present: 24, total: 28 }, COA: { present: 22, total: 26 }, DSC: { present: 25, total: 27 } },
+      '92500133026': { PWP: { present: 18, total: 30 }, DMGT: { present: 15, total: 28 }, COA: { present: 14, total: 26 }, DSC: { present: 16, total: 27 } },
+      '92500133034': { PWP: { present: 30, total: 30 }, DMGT: { present: 28, total: 28 }, COA: { present: 25, total: 26 }, DSC: { present: 27, total: 27 } }
+    };
+
+    const INITIAL_CAMPUS_UPDATES = [
+      {
+        id: 'UPD-101',
+        category: 'Assignment',
+        subject: 'PWP',
+        title: 'Django REST API & JWT Auth Lab Assignment',
+        date: '2026-11-18',
+        details: 'Build a complete CRUD endpoint with token verification and upload your GitHub repository link.',
+        postedBy: 'Prof. R. K. Sharma'
+      },
+      {
+        id: 'UPD-102',
+        category: 'Holiday',
+        subject: 'ALL',
+        title: 'Guru Nanak Jayanti University Holiday',
+        date: '2026-11-15',
+        details: 'All ICT lectures and laboratory sessions remain suspended on account of Guru Nanak Jayanti.',
+        postedBy: 'Prof. R. K. Sharma'
+      },
+      {
+        id: 'UPD-103',
+        category: 'Event',
+        subject: 'ICT Dept',
+        title: 'MU-HACK 2026 Smart Campus Hackathon',
+        date: '2026-11-22',
+        details: '24-hour coding sprint in Main Auditorium. All registered participants receive automatic On-Duty attendance.',
+        postedBy: 'Prof. Kawal Kaur'
+      }
+    ];
+
+    function App() {
+      const [users, setUsers] = useState(INITIAL_USERS);
+      const [currentUser, setCurrentUser] = useState(null);
+      const [activeRoleTab, setActiveRoleTab] = useState('student');
+      const [results, setResults] = useState(INITIAL_RESULTS);
+      const [attendance, setAttendance] = useState(INITIAL_ATTENDANCE);
+      const [mismatchLogs, setMismatchLogs] = useState([]);
+      const [sessionToken, setSessionToken] = useState('MU-QR-982301');
+      const [qrCountdown, setQrCountdown] = useState(30);
+
+      // Shared active biometric & QR state across portals
+      const [activeCameraSubjectId, setActiveCameraSubjectId] = useState('92500133046');
+      const [activeQrOwnerId, setActiveQrOwnerId] = useState('92500133046');
+      const [studentSessionMarks, setStudentSessionMarks] = useState({});
+      const [campusUpdates, setCampusUpdates] = useState(INITIAL_CAMPUS_UPDATES);
+
+      // Dynamic 30-Second Auto-Rotating QR Token Refresh
+      useEffect(() => {
+        const timer = setInterval(() => {
+          setQrCountdown((prev) => {
+            if (prev <= 1) {
+              setSessionToken('MU-QR-' + Math.floor(100000 + Math.random() * 900000));
+              return 30;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      return (
+        <div className="min-h-screen bg-[#090d16] text-slate-100 font-sans antialiased flex flex-col">
+          {!currentUser ? (
+            <SystemAccessPortal
+              users={users}
+              activeRoleTab={activeRoleTab}
+              setActiveRoleTab={setActiveRoleTab}
+              onLogin={(user) => setCurrentUser(user)}
+            />
+          ) : (
+            <PortalDashboard
+              user={currentUser}
+              onLogout={() => setCurrentUser(null)}
+              users={users}
+              setUsers={setUsers}
+              attendance={attendance}
+              setAttendance={setAttendance}
+              results={results}
+              setResults={setResults}
+              sessionToken={sessionToken}
+              qrCountdown={qrCountdown}
+              mismatchLogs={mismatchLogs}
+              setMismatchLogs={setMismatchLogs}
+              activeCameraSubjectId={activeCameraSubjectId}
+              setActiveCameraSubjectId={setActiveCameraSubjectId}
+              activeQrOwnerId={activeQrOwnerId}
+              setActiveQrOwnerId={setActiveQrOwnerId}
+              studentSessionMarks={studentSessionMarks}
+              setStudentSessionMarks={setStudentSessionMarks}
+              campusUpdates={campusUpdates}
+              setCampusUpdates={setCampusUpdates}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 1. SYSTEM ACCESS PORTAL (LOGIN SCREEN)
+    // ==========================================
+    function SystemAccessPortal({ users, activeRoleTab, setActiveRoleTab, onLogin }) {
+      const [idInput, setIdInput] = useState('92500133046');
+      const [passInput, setPassInput] = useState('Madhu@123');
+      const [showPass, setShowPass] = useState(false);
+      const [error, setError] = useState('');
+      const [forgotModal, setForgotModal] = useState(false);
+      const [otpSent, setOtpSent] = useState(false);
+      const [forgotId, setForgotId] = useState('');
+      const [forgotEmail, setForgotEmail] = useState('');
+
+      const handleRoleSelect = (role) => {
+        setActiveRoleTab(role);
+        setError('');
+        if (role === 'student') {
+          const firstStudent = users.find((u) => u.role === 'student');
+          setIdInput(firstStudent?.roll || '92500133046');
+          setPassInput(firstStudent?.pass || 'Madhu@123');
+        } else if (role === 'faculty') {
+          const firstFaculty = users.find((u) => u.role === 'faculty');
+          setIdInput(firstFaculty?.id || 'FAC-102');
+          setPassInput(firstFaculty?.pass || 'Sharma@123');
+        } else {
+          const firstAdmin = users.find((u) => u.role === 'admin');
+          setIdInput(firstAdmin?.id || 'ADMIN-01');
+          setPassInput(firstAdmin?.pass || 'Admin@123');
+        }
+      };
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        const found = users.find(
+          (u) =>
+            (u.id.toLowerCase() === idInput.toLowerCase() ||
+              u.email.toLowerCase() === idInput.toLowerCase() ||
+              (u.roll && u.roll.toLowerCase() === idInput.toLowerCase())) &&
+            u.pass === passInput
+        );
+
+        if (found) {
+          if (found.role !== activeRoleTab) {
+            setError(`This user is registered as a ${found.role.toUpperCase()}. Please select the ${found.role.toUpperCase()} tab.`);
+            return;
+          }
+          onLogin(found);
+        } else {
+          setError('Invalid ID / Enrollment Number or Password. Please try again.');
+        }
+      };
+
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center p-4 bg-[#090d16] relative">
+          <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-1/4 right-1/3 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="mb-6 text-center z-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-950/80 border border-indigo-800/60 rounded-full text-[11px] font-semibold text-indigo-300 mb-3">
+              <Zap className="w-3.5 h-3.5 text-indigo-400" /> Marwadi University ICT Department
+            </div>
+            <h1 className="text-2xl font-extrabold text-white tracking-tight sm:text-3xl">
+              Smart Curriculum Activity and Attendance App
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">Unified Multi-Factor Biometric & Activity Management System</p>
+          </div>
+
+          <div className="w-full max-w-md bg-[#0f1523] border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl z-10 relative">
+            <div>
+              <h2 className="text-lg font-bold text-white">System Access Portal</h2>
+              <p className="text-xs text-slate-400">Select account type or use one-click access presets</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1 bg-[#070a12] p-1.5 rounded-2xl border border-slate-800/80 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => handleRoleSelect('student')}
+                className={`py-2.5 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer ${
+                  activeRoleTab === 'student' ? 'bg-[#5852f2] text-white shadow-lg shadow-indigo-500/30 font-bold' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <GraduationCap className="w-4 h-4" />
+                <span>Student</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRoleSelect('faculty')}
+                className={`py-2.5 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer ${
+                  activeRoleTab === 'faculty' ? 'bg-[#5852f2] text-white shadow-lg shadow-indigo-500/30 font-bold' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <User className="w-4 h-4" />
+                <span>Faculty</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRoleSelect('admin')}
+                className={`py-2.5 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer ${
+                  activeRoleTab === 'admin' ? 'bg-[#5852f2] text-white shadow-lg shadow-indigo-500/30 font-bold' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Shield className="w-4 h-4" />
+                <span>Admin</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              {error && <div className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-red-300 font-semibold">{error}</div>}
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1.5">
+                  {activeRoleTab === 'student' ? 'Student Enrollment Number' : activeRoleTab === 'faculty' ? 'Faculty ID / Email' : 'Admin ID / Email'}
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={idInput}
+                    onChange={(e) => setIdInput(e.target.value)}
+                    placeholder={activeRoleTab === 'student' ? '92500133046' : 'Enter ID or Email'}
+                    className="w-full p-3.5 pl-10 bg-[#070a12] border border-slate-800 rounded-2xl text-slate-100 font-mono focus:border-indigo-500 focus:outline-none"
+                  />
+                  <span className="absolute left-3.5 top-4 text-slate-500">
+                    <User className="w-4 h-4" />
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-slate-300 font-semibold">Password</label>
+                  <button
+                    type="button"
+                    onClick={() => setForgotModal(true)}
+                    className="text-indigo-400 text-[11px] font-semibold hover:underline cursor-pointer"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPass ? 'text' : 'password'}
+                    required
+                    value={passInput}
+                    onChange={(e) => setPassInput(e.target.value)}
+                    className="w-full p-3.5 pl-10 pr-10 bg-[#070a12] border border-slate-800 rounded-2xl text-slate-100 font-mono focus:border-indigo-500 focus:outline-none"
+                  />
+                  <span className="absolute left-3.5 top-4 text-slate-500">
+                    <Lock className="w-4 h-4" />
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPass(!showPass)}
+                    className="absolute right-3.5 top-4 text-slate-500 hover:text-slate-300 cursor-pointer"
+                  >
+                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3.5 bg-[#5852f2] hover:bg-indigo-600 text-white font-bold rounded-2xl text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer"
+              >
+                <span>Authenticate & Enter</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </form>
+
+            {/* Preset Quick Fill Bar */}
+            <div className="p-3 bg-[#070a12] border border-slate-800/80 rounded-2xl space-y-2 text-[11px]">
+              <div className="font-bold text-slate-300 flex items-center justify-between">
+                <span>Quick Student & Staff Presets:</span>
+                <span className="text-indigo-400 text-[10px]">Click to auto-fill</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-center font-mono">
+                {users
+                  .filter((u) => u.role === 'student')
+                  .slice(0, 4)
+                  .map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveRoleTab('student');
+                        setIdInput(s.roll || s.id);
+                        setPassInput(s.pass);
+                      }}
+                      className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-300 text-[10px] font-semibold cursor-pointer truncate px-2"
+                      title={`${s.name} (${s.roll || s.id})`}
+                    >
+                      {s.name.split(' ').slice(0, 2).join(' ')} ({(s.roll || s.id).slice(-5)})
+                    </button>
+                  ))}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-center font-mono pt-1 border-t border-slate-800/80">
+                {users
+                  .filter((u) => u.role === 'faculty')
+                  .slice(0, 1)
+                  .map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveRoleTab('faculty');
+                        setIdInput(f.id);
+                        setPassInput(f.pass);
+                      }}
+                      className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-emerald-300 text-[10px] font-semibold cursor-pointer truncate px-2"
+                      title={`${f.name} (${f.id})`}
+                    >
+                      {f.name} ({f.id})
+                    </button>
+                  ))}
+                {users
+                  .filter((u) => u.role === 'admin')
+                  .slice(0, 1)
+                  .map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveRoleTab('admin');
+                        setIdInput(a.id);
+                        setPassInput(a.pass);
+                      }}
+                      className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-amber-300 text-[10px] font-semibold cursor-pointer truncate px-2"
+                      title={`${a.name} (${a.id})`}
+                    >
+                      {a.name.split(' ')[0]} ({a.id})
+                    </button>
+                  ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Forgot Password Modal */}
+          {forgotModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-[#0f1523] border border-slate-800 rounded-3xl p-6 w-full max-w-sm space-y-4">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Key className="w-4 h-4 text-indigo-400" /> Reset Password Request
+                </h3>
+                {!otpSent ? (
+                  <div className="space-y-3 text-xs">
+                    <p className="text-slate-400">Enter your registered Enrollment No / ID and Email to receive a password reset link/OTP.</p>
+                    <input
+                      type="text"
+                      placeholder="Enrollment Number / ID"
+                      value={forgotId}
+                      onChange={(e) => setForgotId(e.target.value)}
+                      className="w-full p-3 bg-[#070a12] border border-slate-800 rounded-xl text-white font-mono"
+                    />
+                    <input
+                      type="email"
+                      placeholder="Registered University Email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      className="w-full p-3 bg-[#070a12] border border-slate-800 rounded-xl text-white font-mono"
+                    />
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setForgotModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 font-bold rounded-xl cursor-pointer">
+                        Cancel
+                      </button>
+                      <button type="button" onClick={() => setOtpSent(true)} className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer">
+                        Send Reset Link
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 text-xs text-center">
+                    <div className="w-10 h-10 rounded-full bg-emerald-950 border border-emerald-800 text-emerald-400 flex items-center justify-center mx-auto">
+                      <Check className="w-5 h-5" />
+                    </div>
+                    <p className="text-emerald-300 font-semibold">Password Reset Email Dispatched!</p>
+                    <p className="text-slate-400 text-[11px]">
+                      Temporary verification OTP: <strong className="text-white font-mono">849201</strong> sent to your email.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotModal(false);
+                        setOtpSent(false);
+                      }}
+                      className="w-full py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer"
+                    >
+                      Return to Login
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 2. MAIN PORTAL DASHBOARD (AUTHENTICATED)
+    // ==========================================
+    function PortalDashboard({
+      user,
+      onLogout,
+      users,
+      setUsers,
+      attendance,
+      setAttendance,
+      results,
+      setResults,
+      sessionToken,
+      qrCountdown,
+      mismatchLogs,
+      setMismatchLogs,
+      activeCameraSubjectId,
+      setActiveCameraSubjectId,
+      activeQrOwnerId,
+      setActiveQrOwnerId,
+      studentSessionMarks,
+      setStudentSessionMarks,
+      campusUpdates,
+      setCampusUpdates
+    }) {
+      const syncedUser = users.find((u) => u.id === user.id) || user;
+      const [showUserPass, setShowUserPass] = useState(false);
+      const [activeTab, setActiveTab] = useState(
+        syncedUser.role === 'admin' ? 'directory' : syncedUser.role === 'faculty' ? 'live' : 'student-dashboard'
+      );
+
+      const [camEnrollModal, setCamEnrollModal] = useState(false);
+      const [targetStudentForReset, setTargetStudentForReset] = useState(null);
+
+      return (
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#090d16]">
+          {/* Top Header */}
+          <header className="h-14 border-b border-slate-800 bg-[#0c101c] flex items-center justify-between px-6 shrink-0 z-20">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-white text-xs shadow-lg shadow-indigo-600/30">
+                MU
+              </div>
+              <div>
+                <h1 className="text-sm font-bold text-white tracking-wide">Marwadi University ICT</h1>
+                <p className="text-[10px] text-emerald-400 flex items-center gap-1 font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Smart Attendance & Activity System
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 bg-[#070a12] border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
+                <div className="w-7 h-7 rounded-full bg-indigo-600/30 text-indigo-300 flex items-center justify-center font-bold overflow-hidden border border-indigo-500/40">
+                  {syncedUser.photo ? (
+                    <img src={syncedUser.photo} alt={syncedUser.name} className="w-full h-full object-cover" />
+                  ) : (
+                    syncedUser.name.charAt(0)
+                  )}
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-slate-200 text-[11px]">{syncedUser.name}</div>
+                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+                    <span className="text-slate-500">{syncedUser.role.toUpperCase()}</span> |
+                    <span>
+                      Pass: <strong className="text-cyan-300">{showUserPass ? syncedUser.pass : '••••••••'}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowUserPass(!showUserPass)}
+                      className="text-slate-400 hover:text-cyan-400 transition cursor-pointer"
+                    >
+                      {showUserPass ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {syncedUser.role === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetStudentForReset(null);
+                    setCamEnrollModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition cursor-pointer"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Camera Enrollment</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={onLogout}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-red-600/30 transition cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Logout</span>
+              </button>
+            </div>
+          </header>
+
+          <div className="flex-1 flex overflow-hidden">
+            {/* Sidebar Nav */}
+            <aside className="w-60 border-r border-slate-800 bg-[#0c101c] p-4 flex flex-col space-y-1 text-xs shrink-0">
+              {syncedUser.role === 'admin' && (
+                <>
+                  <SidebarItem icon={BarChart2} label="System Analytics" active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} />
+                  <SidebarItem icon={Users} label="User Directory & Keys" active={activeTab === 'directory'} onClick={() => setActiveTab('directory')} />
+                  <SidebarItem icon={AlertTriangle} label="Defaulter Alerts (<75%)" active={activeTab === 'defaulters'} onClick={() => setActiveTab('defaulters')} />
+                  <SidebarItem icon={BookOpen} label="Master Curriculum" active={activeTab === 'curriculum'} onClick={() => setActiveTab('curriculum')} />
+                  <SidebarItem icon={FileText} label="Activity Logs" active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} />
+                  <SidebarItem icon={MapPin} label="Classroom Allocator" active={activeTab === 'allocator'} onClick={() => setActiveTab('allocator')} />
+                  <SidebarItem icon={Sliders} label="Biometric Sensitivity" active={activeTab === 'sensitivity'} onClick={() => setActiveTab('sensitivity')} />
+                </>
+              )}
+
+              {syncedUser.role === 'faculty' && (
+                <>
+                  <SidebarItem icon={Video} label="Live Attendance Engine" active={activeTab === 'live'} onClick={() => setActiveTab('live')} />
+                  <SidebarItem icon={Calendar} label="Assignments, Holidays & Events" active={activeTab === 'updates'} onClick={() => setActiveTab('updates')} />
+                  <SidebarItem icon={Award} label="Grade & Result Entry" active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} />
+                  <SidebarItem icon={HelpCircle} label="Live Quiz & Polls" active={activeTab === 'polls'} onClick={() => setActiveTab('polls')} />
+                  <SidebarItem icon={FileCheck} label="Assignment Plagiarism" active={activeTab === 'plagiarism'} onClick={() => setActiveTab('plagiarism')} />
+                  <SidebarItem icon={Bell} label="Low Attendance Alerts" active={activeTab === 'faculty-alerts'} onClick={() => setActiveTab('faculty-alerts')} />
+                </>
+              )}
+
+              {syncedUser.role === 'student' && (
+                <>
+                  <SidebarItem icon={Gauge} label="Student Dashboard" active={activeTab === 'student-dashboard'} onClick={() => setActiveTab('student-dashboard')} />
+                  <SidebarItem icon={QrCode} label="Scan Faculty QR" active={activeTab === 'scan'} onClick={() => setActiveTab('scan')} />
+                  <SidebarItem icon={Calendar} label="Timetable & Schedule" active={activeTab === 'timetable'} onClick={() => setActiveTab('timetable')} />
+                  <SidebarItem icon={FileCode2} label="Assignments Hub" active={activeTab === 'assignments'} onClick={() => setActiveTab('assignments')} />
+                  <SidebarItem icon={GraduationCap} label="Results & Transcript" active={activeTab === 'results'} onClick={() => setActiveTab('results')} />
+                  <SidebarItem icon={BookOpen} label="Curriculum Progress" active={activeTab === 'curriculum-progress'} onClick={() => setActiveTab('curriculum-progress')} />
+                  <SidebarItem icon={CalendarCheck} label="Holidays & Events" active={activeTab === 'holidays-events'} onClick={() => setActiveTab('holidays-events')} />
+                </>
+              )}
+            </aside>
+
+            {/* Main Body */}
+            <main className="flex-1 p-6 overflow-y-auto bg-[#090d16]">
+              {/* ADMIN VIEWS */}
+              {syncedUser.role === 'admin' && activeTab === 'directory' && (
+                <AdminUserDirectory
+                  users={users}
+                  setUsers={setUsers}
+                  onResetFace={(student) => {
+                    setTargetStudentForReset(student.id);
+                    setCamEnrollModal(true);
+                  }}
+                />
+              )}
+              {syncedUser.role === 'admin' && activeTab === 'analytics' && <AdminAnalytics users={users} attendance={attendance} mismatchLogs={mismatchLogs} />}
+              {syncedUser.role === 'admin' && activeTab === 'defaulters' && <AdminDefaulters attendance={attendance} users={users} />}
+              {syncedUser.role === 'admin' && activeTab === 'sensitivity' && <AdminBiometricSensitivity />}
+              {syncedUser.role === 'admin' && activeTab === 'allocator' && <AdminClassroomAllocator users={users} />}
+              {syncedUser.role === 'admin' && activeTab === 'curriculum' && <AdminMasterCurriculum />}
+              {syncedUser.role === 'admin' && activeTab === 'logs' && <AdminActivityLogs mismatchLogs={mismatchLogs} />}
+
+              {/* FACULTY VIEWS */}
+              {syncedUser.role === 'faculty' && activeTab === 'live' && (
+                <FacultyLiveAttendance
+                  facultyUser={syncedUser}
+                  users={users}
+                  sessionToken={sessionToken}
+                  qrCountdown={qrCountdown}
+                  attendance={attendance}
+                  setAttendance={setAttendance}
+                  mismatchLogs={mismatchLogs}
+                  setMismatchLogs={setMismatchLogs}
+                  activeCameraSubjectId={activeCameraSubjectId}
+                  setActiveCameraSubjectId={setActiveCameraSubjectId}
+                  activeQrOwnerId={activeQrOwnerId}
+                  setActiveQrOwnerId={setActiveQrOwnerId}
+                  studentSessionMarks={studentSessionMarks}
+                  setStudentSessionMarks={setStudentSessionMarks}
+                />
+              )}
+              {syncedUser.role === 'faculty' && activeTab === 'updates' && (
+                <FacultyUpdatesManager facultyUser={syncedUser} campusUpdates={campusUpdates} setCampusUpdates={setCampusUpdates} />
+              )}
+              {syncedUser.role === 'faculty' && activeTab === 'grades' && <FacultyGradeEntry users={users} results={results} setResults={setResults} />}
+              {syncedUser.role === 'faculty' && activeTab === 'polls' && <FacultyLiveQuizPoll />}
+              {syncedUser.role === 'faculty' && activeTab === 'plagiarism' && <FacultyPlagiarismCheck />}
+              {syncedUser.role === 'faculty' && activeTab === 'faculty-alerts' && <FacultyMassAlerts attendance={attendance} users={users} />}
+
+              {/* STUDENT VIEWS */}
+              {syncedUser.role === 'student' && activeTab === 'student-dashboard' && (
+                <StudentDashboardOverview
+                  studentUser={syncedUser}
+                  attendance={attendance[syncedUser.id]}
+                  results={results[syncedUser.id]}
+                  campusUpdates={campusUpdates}
+                  studentSessionMarks={studentSessionMarks}
+                  onNavigate={setActiveTab}
+                />
+              )}
+              {syncedUser.role === 'student' && activeTab === 'scan' && (
+                <StudentQrScanner
+                  studentUser={syncedUser}
+                  users={users}
+                  sessionToken={sessionToken}
+                  qrCountdown={qrCountdown}
+                  attendance={attendance}
+                  setAttendance={setAttendance}
+                  setMismatchLogs={setMismatchLogs}
+                  activeQrOwnerId={activeQrOwnerId}
+                  setStudentSessionMarks={setStudentSessionMarks}
+                />
+              )}
+              {syncedUser.role === 'student' && activeTab === 'timetable' && <StudentTimetableSchedule users={users} />}
+              {syncedUser.role === 'student' && activeTab === 'assignments' && <StudentAssignmentsHub campusUpdates={campusUpdates} />}
+              {syncedUser.role === 'student' && activeTab === 'results' && <StudentResultsTranscript studentUser={syncedUser} results={results[syncedUser.id]} />}
+              {syncedUser.role === 'student' && activeTab === 'curriculum-progress' && <StudentCurriculumProgress users={users} />}
+              {syncedUser.role === 'student' && activeTab === 'holidays-events' && <StudentHolidaysEvents campusUpdates={campusUpdates} />}
+            </main>
+          </div>
+
+          {camEnrollModal && (
+            <CameraEnrollmentModal
+              onClose={() => setCamEnrollModal(false)}
+              users={users}
+              setUsers={setUsers}
+              initialStudentId={targetStudentForReset}
+              setActiveCameraSubjectId={setActiveCameraSubjectId}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // Camera Enrollment & Reset Photo Component (Real Webcam Capture & File Fallback)
+    function CameraEnrollmentModal({ onClose, users, setUsers, initialStudentId, setActiveCameraSubjectId }) {
+      const students = users.filter((u) => u.role === 'student');
+      const [selectedId, setSelectedId] = useState(initialStudentId || students[0]?.id || '');
+      const [facingMode, setFacingMode] = useState('user');
+      const [captured, setCaptured] = useState(false);
+      const [tempImage, setTempImage] = useState(null);
+      const [tempVector, setTempVector] = useState(null);
+      const [cameraActive, setCameraActive] = useState(false);
+      const [cameraError, setCameraError] = useState('');
+      const videoRef = useRef(null);
+      const fileInputRef = useRef(null);
+
+      useEffect(() => {
+        let stream = null;
+        setCameraError('');
+        if (!captured) {
+          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices
+              .getUserMedia({ video: { facingMode: { ideal: facingMode }, width: { ideal: 640 }, height: { ideal: 480 } } })
+              .then((s) => {
+                stream = s;
+                setCameraActive(true);
+                if (videoRef.current) {
+                  videoRef.current.srcObject = s;
+                }
+              })
+              .catch(() => {
+                navigator.mediaDevices
+                  .getUserMedia({ video: true })
+                  .then((s) => {
+                    stream = s;
+                    setCameraActive(true);
+                    if (videoRef.current) videoRef.current.srcObject = s;
+                  })
+                  .catch(() => {
+                    setCameraActive(false);
+                    setCameraError('Live webcam access blocked or unavailable. Use "Upload Real Photo" below.');
+                  });
+              });
+          } else {
+            setCameraActive(false);
+            setCameraError('Camera API unavailable in this browser. Use "Upload Real Photo" below.');
+          }
+        }
+        return () => stream?.getTracks().forEach((t) => t.stop());
+      }, [facingMode, captured]);
+
+      const handleCapture = () => {
+        const video = videoRef.current;
+        if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          if (facingMode === 'user') {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+          }
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const realDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          const vec = computeImageBiometricVector(canvas);
+          setTempImage(realDataUrl);
+          setTempVector(vec);
+          setCaptured(true);
+        } else {
+          fileInputRef.current?.click();
+        }
+      };
+
+      const handleFileUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result;
+          const img = new Image();
+          img.onload = () => {
+            const vec = computeImageBiometricVector(img);
+            setTempImage(dataUrl);
+            setTempVector(vec);
+            setCaptured(true);
+            setCameraError('');
+          };
+          img.src = dataUrl;
+        };
+        reader.readAsDataURL(file);
+      };
+
+      const handleSave = () => {
+        if (!selectedId || !tempImage) return;
+        const newSig = `BIO-FACE-${selectedId.slice(-5)}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === selectedId
+              ? { ...u, photo: tempImage, faceSignature: newSig, faceVector: tempVector, isRealEnrolled: true }
+              : u
+          )
+        );
+        if (setActiveCameraSubjectId) {
+          setActiveCameraSubjectId(selectedId);
+        }
+        onClose();
+      };
+
+      return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-[#0f1523] border border-slate-800 rounded-3xl p-6 w-full max-w-md space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 font-bold text-white text-sm">
+                <Camera className="w-4 h-4 text-indigo-400" />
+                <span>Real Biometric Face Registration & Photo Reset</span>
+              </div>
+              <button type="button" onClick={onClose} className="text-slate-400 hover:text-white font-bold text-sm cursor-pointer">
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-slate-400">Target Student Profile:</label>
+              <select
+                value={selectedId}
+                onChange={(e) => {
+                  setSelectedId(e.target.value);
+                  setCaptured(false);
+                  setTempImage(null);
+                  setTempVector(null);
+                }}
+                className="w-full p-2.5 bg-[#070a12] border border-slate-800 rounded-xl text-white font-semibold"
+              >
+                {students.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.roll || s.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="user"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+
+            <div className="relative aspect-video bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden flex items-center justify-center">
+              {!captured ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+                  />
+                  {cameraActive && (
+                    <div className="absolute inset-6 border-2 border-dashed border-emerald-400/80 rounded-full pointer-events-none" />
+                  )}
+                  {cameraError && (
+                    <div className="absolute inset-0 bg-slate-950/90 p-4 flex flex-col items-center justify-center text-center gap-2">
+                      <AlertCircle className="w-6 h-6 text-amber-400" />
+                      <p className="text-slate-300 text-[11px]">{cameraError}</p>
+                    </div>
+                  )}
+                  <div className="absolute bottom-3 right-3 flex items-center gap-1.5 z-10">
+                    <button
+                      type="button"
+                      onClick={() => setFacingMode('user')}
+                      className={`px-2.5 py-1.5 border rounded-xl text-[10px] font-bold cursor-pointer ${
+                        facingMode === 'user'
+                          ? 'bg-indigo-600 border-indigo-400 text-white'
+                          : 'bg-slate-900/85 border-slate-700 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      Front Cam
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFacingMode('environment')}
+                      className={`px-2.5 py-1.5 border rounded-xl text-[10px] font-bold cursor-pointer ${
+                        facingMode === 'environment'
+                          ? 'bg-indigo-600 border-indigo-400 text-white'
+                          : 'bg-slate-900/85 border-slate-700 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      Back Cam
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <img src={tempImage} alt="Captured real biometric preview" className="w-full h-full object-cover" />
+              )}
+            </div>
+
+            {!captured ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCapture}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/30"
+                >
+                  <Camera className="w-4 h-4" /> Capture Live Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3.5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Upload className="w-4 h-4" /> Upload
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCaptured(false);
+                    setTempImage(null);
+                    setTempVector(null);
+                  }}
+                  className="flex-1 py-2.5 bg-slate-800 text-slate-300 font-bold rounded-xl cursor-pointer"
+                >
+                  Retake
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl cursor-pointer"
+                >
+                  Save Real Biometric Photo
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function SidebarItem({ icon: Icon, label, active, onClick }) {
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          className={`w-full p-2.5 rounded-xl flex items-center gap-3 font-semibold transition text-xs cursor-pointer text-left ${
+            active ? 'bg-[#5852f2] text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+          }`}
+        >
+          <Icon className="w-4 h-4" />
+          <span className="truncate">{label}</span>
+        </button>
+      );
+    }
+
+    // ==========================================
+    // 3. ADMIN PORTAL COMPONENTS
+    // ==========================================
+    function AdminUserDirectory({ users, setUsers, onResetFace }) {
+      const [showPassMap, setShowPassMap] = useState({});
+      const [showAddModal, setShowAddModal] = useState(false);
+      const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+      const [editingUserId, setEditingUserId] = useState(null);
+      const [editNameValue, setEditNameValue] = useState('');
+      const [newUser, setNewUser] = useState({ name: '', id: '', email: '', role: 'student', pass: 'Mu@2026', dept: 'ICT Sem 3' });
+
+      const togglePass = (id) => {
+        setShowPassMap((prev) => ({ ...prev, [id]: !prev[id] }));
+      };
+
+      const startEditingName = (userObj) => {
+        setEditingUserId(userObj.id);
+        setEditNameValue(userObj.name);
+        setConfirmDeleteId(null);
+      };
+
+      const saveEditedName = (id) => {
+        const trimmed = editNameValue.trim();
+        if (!trimmed) return;
+        setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, name: trimmed } : u)));
+        setEditingUserId(null);
+        setEditNameValue('');
+      };
+
+      const handleAddUser = (e) => {
+        e.preventDefault();
+        const sig = `BIO-FACE-${newUser.id.slice(-5)}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
+        setUsers([
+          ...users,
+          {
+            ...newUser,
+            roll: newUser.id,
+            faceSignature: newUser.role === 'student' ? sig : null,
+            faceVector: null,
+            isRealEnrolled: false,
+            photo: null
+          }
+        ]);
+        setShowAddModal(false);
+        setNewUser({ name: '', id: '', email: '', role: 'student', pass: 'Mu@2026', dept: 'ICT Sem 3' });
+      };
+
+      const handleDeleteUser = (id) => {
+        setUsers((prev) => prev.filter((u) => u.id !== id));
+        setConfirmDeleteId(null);
+      };
+
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-white uppercase tracking-wider">User Directory & Keys</h2>
+              <p className="text-xs text-slate-400">Manage registered Admin, Faculty, and Student credentials, names & biometric photos</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> Add New User
+            </button>
+          </div>
+
+          <div className="bg-[#0e1422] border border-slate-800/80 rounded-2xl p-4 shadow-xl overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#06080e] text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th className="p-3">USER</th>
+                  <th className="p-3">ROLE</th>
+                  <th className="p-3">ID / ROLL NO</th>
+                  <th className="p-3">UNIVERSITY EMAIL</th>
+                  <th className="p-3">CREATED PASSWORD</th>
+                  <th className="p-3">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {users.map((u) => (
+                  <tr key={u.id} className="hover:bg-slate-800/20">
+                    <td className="p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden flex items-center justify-center font-bold text-slate-300 border border-slate-700 shrink-0">
+                          {u.photo ? <img src={u.photo} alt={u.name} className="w-full h-full object-cover" /> : u.name.charAt(0)}
+                        </div>
+                        {editingUserId === u.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={editNameValue}
+                              onChange={(e) => setEditNameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveEditedName(u.id);
+                                if (e.key === 'Escape') setEditingUserId(null);
+                              }}
+                              autoFocus
+                              className="px-2.5 py-1 bg-[#070a12] border border-indigo-500 rounded-lg text-white font-semibold text-xs focus:outline-none w-44"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => saveEditedName(u.id)}
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold cursor-pointer"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingUserId(null)}
+                              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-bold cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="font-semibold text-slate-200 flex items-center gap-1.5">
+                              <span>{u.name}</span>
+                              {u.isRealEnrolled && (
+                                <span className="px-1.5 py-0.5 bg-emerald-950 border border-emerald-800 text-emerald-400 rounded text-[9px] font-mono">
+                                  REAL CAM
+                                </span>
+                              )}
+                            </div>
+                            {u.faceSignature && <div className="text-[10px] font-mono text-indigo-400">{u.faceSignature}</div>}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${
+                          u.role === 'admin'
+                            ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                            : u.role === 'faculty'
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                            : 'bg-indigo-950 text-indigo-300 border border-indigo-800'
+                        }`}
+                      >
+                        {u.role.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="p-3 font-mono text-slate-400">{u.roll || u.id}</td>
+                    <td className="p-3 font-mono text-slate-400">{u.email}</td>
+                    <td className="p-3 font-mono text-slate-300">
+                      <div className="flex items-center gap-2">
+                        <span className="text-cyan-300">{showPassMap[u.id] ? u.pass : '••••••••'}</span>
+                        <button type="button" onClick={() => togglePass(u.id)} className="text-slate-500 hover:text-slate-300 cursor-pointer">
+                          {showPassMap[u.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      {u.role !== 'admin' ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditingName(u)}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-300 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                            title={`Edit ${u.name}`}
+                          >
+                            <Edit3 className="w-3 h-3" /> Edit Name
+                          </button>
+
+                          {u.role === 'student' && (
+                            <button
+                              type="button"
+                              onClick={() => onResetFace(u)}
+                              className="px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 border border-indigo-800 text-indigo-300 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                            >
+                              <Camera className="w-3 h-3" /> Reset Photo
+                            </button>
+                          )}
+
+                          {confirmDeleteId === u.id ? (
+                            <div className="flex items-center gap-1 bg-red-950/90 border border-red-800 px-2 py-1 rounded-lg">
+                              <span className="text-[10px] text-red-200 font-semibold mr-1">Delete?</span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteUser(u.id)}
+                                className="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                Yes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                No
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(u.id)}
+                              className="px-2.5 py-1 bg-red-950/70 hover:bg-red-900 border border-red-800/80 text-red-300 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                            >
+                              <Trash2 className="w-3 h-3" /> Delete
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startEditingName(u)}
+                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <Edit3 className="w-3 h-3" /> Edit Name
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {showAddModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <form onSubmit={handleAddUser} className="bg-[#0f1523] border border-slate-800 rounded-3xl p-6 w-full max-w-md space-y-4 text-xs">
+                <h3 className="text-sm font-bold text-white">Create New User Account</h3>
+                <input required placeholder="Full Name" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} className="w-full p-3 bg-[#070a12] border border-slate-800 rounded-xl text-white" />
+                <input required placeholder="Enrollment No / Staff ID" value={newUser.id} onChange={(e) => setNewUser({ ...newUser, id: e.target.value })} className="w-full p-3 bg-[#070a12] border border-slate-800 rounded-xl text-white font-mono" />
+                <input required placeholder="Email Address" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="w-full p-3 bg-[#070a12] border border-slate-800 rounded-xl text-white font-mono" />
+                <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} className="w-full p-3 bg-[#070a12] border border-slate-800 rounded-xl text-white">
+                  <option value="student">Student</option>
+                  <option value="faculty">Faculty</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <input required placeholder="Assign Password" value={newUser.pass} onChange={(e) => setNewUser({ ...newUser, pass: e.target.value })} className="w-full p-3 bg-[#070a12] border border-slate-800 rounded-xl text-white font-mono" />
+
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 font-bold rounded-xl cursor-pointer">
+                    Cancel
+                  </button>
+                  <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer">
+                    Register Account
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function AdminAnalytics({ users, attendance, mismatchLogs }) {
+      return (
+        <div className="space-y-6 text-xs">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">System Analytics Overview</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl">
+              <div className="text-slate-400 font-semibold">Total Registered Users</div>
+              <div className="text-2xl font-bold text-white mt-1">{users.length}</div>
+            </div>
+            <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl">
+              <div className="text-slate-400 font-semibold">Overall Attendance Avg</div>
+              <div className="text-2xl font-bold text-emerald-400 mt-1">84.2%</div>
+            </div>
+            <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl">
+              <div className="text-slate-400 font-semibold">Defaulter Students (&lt;75%)</div>
+              <div className="text-2xl font-bold text-red-400 mt-1">1</div>
+            </div>
+            <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl">
+              <div className="text-slate-400 font-semibold">Biometric & QR Mismatches</div>
+              <div className="text-2xl font-bold text-amber-400 mt-1">{mismatchLogs.length} Alerts</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function AdminDefaulters({ attendance, users }) {
+      const shivanag = users.find((u) => u.id === '92500133026') || { name: 'M. Shivanag', roll: '92500133026' };
+      return (
+        <div className="space-y-4 text-xs">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">Defaulter Alerts (&lt;75%)</h2>
+          <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-4">
+            <div className="p-3 bg-red-950/40 border border-red-800/80 rounded-xl flex items-center justify-between text-red-300">
+              <div>
+                <div className="font-bold">
+                  {shivanag.name} ({shivanag.roll || shivanag.id})
+                </div>
+                <div className="text-[11px] text-slate-400">Current Attendance: 57.1% (PWP: 60%, DMGT: 53%)</div>
+              </div>
+              <button type="button" className="px-3 py-1.5 bg-red-600 text-white font-bold rounded-lg cursor-pointer">
+                Dispatch Warning Letter
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function AdminBiometricSensitivity() {
+      const [sensitivity, setSensitivity] = useState(88);
+      return (
+        <div className="space-y-4 text-xs max-w-md">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">Biometric Sensitivity Controls</h2>
+          <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-4 space-y-3">
+            <label className="text-slate-300 font-semibold">Face Matching Strictness Threshold: {sensitivity}%</label>
+            <input type="range" min="70" max="98" value={sensitivity} onChange={(e) => setSensitivity(e.target.value)} className="w-full accent-indigo-500" />
+            <p className="text-[11px] text-slate-400">Higher strictness prevents proxy scanning across student accounts.</p>
+          </div>
+        </div>
+      );
+    }
+
+    function AdminClassroomAllocator({ users }) {
+      const fac1 = users.find((u) => u.id === 'FAC01')?.name || 'Prof. Kawal Kaur';
+      const fac2 = users.find((u) => u.id === 'FAC02')?.name || 'Prof. Biswajit';
+      return (
+        <div className="space-y-4 text-xs">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">Classroom Location Allocator</h2>
+          <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-4 space-y-2">
+            <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex justify-between">
+              <span className="font-bold text-white">Lab ICT 301</span>
+              <span className="text-slate-400">{fac1} (PWP - Python Web Programming)</span>
+            </div>
+            <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex justify-between">
+              <span className="font-bold text-white">Hall ICT 204</span>
+              <span className="text-slate-400">{fac2} (DMGT - Discrete Math)</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function AdminMasterCurriculum() {
+      return (
+        <div className="space-y-4 text-xs">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">Master Curriculum Tracker</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl">
+              <div className="font-bold text-indigo-300 text-sm">PWP - Python Web Programming</div>
+              <div className="text-slate-400 mt-1">Modules: Django, Flask, REST APIs, ORM Database Layer</div>
+            </div>
+            <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl">
+              <div className="font-bold text-indigo-300 text-sm">DMGT - Discrete Math & Graph Theory</div>
+              <div className="text-slate-400 mt-1">Modules: Combinatorics, Euler Graphs, Propositional Logic</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function AdminActivityLogs({ mismatchLogs }) {
+      return (
+        <div className="space-y-4 text-xs">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">System Security & Activity Logs</h2>
+          <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-4 space-y-2 font-mono">
+            <div className="text-emerald-400">[SYSTEM] Multi-factor per-student QR & biometric engine initialized cleanly</div>
+            {mismatchLogs.length === 0 && <div className="text-slate-400">[INFO] No proxy or QR mismatch incidents recorded yet.</div>}
+            {mismatchLogs.map((log, idx) => (
+              <div key={idx} className="text-red-400">
+                [SECURITY MISMATCH @ {log.time}] {log.student}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 4. FACULTY PORTAL COMPONENTS
+    // ==========================================
+    function FacultyLiveAttendance({
+      facultyUser,
+      users,
+      sessionToken,
+      qrCountdown,
+      attendance,
+      setAttendance,
+      mismatchLogs,
+      setMismatchLogs,
+      activeCameraSubjectId,
+      setActiveCameraSubjectId,
+      activeQrOwnerId,
+      setActiveQrOwnerId,
+      studentSessionMarks,
+      setStudentSessionMarks
+    }) {
+      const [selectedStudent, setSelectedStudent] = useState(activeQrOwnerId || '92500133046');
+      const [statusMsg, setStatusMsg] = useState(null);
+      const [facingMode, setFacingMode] = useState('user');
+      const [activeMode, setActiveMode] = useState('all');
+      const videoRef = useRef(null);
+
+      const students = users.filter((u) => u.role === 'student');
+      const targetStudentObj = students.find((u) => u.id === selectedStudent) || students[0];
+      const cameraPersonObj = students.find((u) => u.id === activeCameraSubjectId) || students[0];
+      const qrSelectedStudentObj = students.find((u) => u.id === activeQrOwnerId) || students[0];
+      const activeUniqueQrCode = `${sessionToken}-${qrSelectedStudentObj?.roll || ''}`;
+
+      useEffect(() => {
+        let stream = null;
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices
+            .getUserMedia({ video: { facingMode: { ideal: facingMode } } })
+            .then((s) => {
+              stream = s;
+              if (videoRef.current) videoRef.current.srcObject = s;
+            })
+            .catch(() => {
+              navigator.mediaDevices
+                .getUserMedia({ video: true })
+                .then((s) => {
+                  stream = s;
+                  if (videoRef.current) videoRef.current.srcObject = s;
+                })
+                .catch(() => {});
+            });
+        }
+
+        return () => stream?.getTracks().forEach((t) => t.stop());
+      }, [facingMode]);
+
+      const markStudentAttendance = (studentId, isPresent, source = 'Faculty Manual / Face') => {
+        const subj = facultyUser.subject || 'PWP';
+        setAttendance((prev) => {
+          const studentAtt = prev[studentId] || { [subj]: { present: 0, total: 0 } };
+          const currentSubj = studentAtt[subj] || { present: 0, total: 0 };
+          return {
+            ...prev,
+            [studentId]: {
+              ...studentAtt,
+              [subj]: {
+                present: currentSubj.present + (isPresent ? 1 : 0),
+                total: currentSubj.total + 1
+              }
+            }
+          };
+        });
+        setStudentSessionMarks((prev) => ({
+          ...prev,
+          [studentId]: {
+            status: isPresent ? 'Marked as Present' : 'Marked Absent',
+            source,
+            time: new Date().toLocaleTimeString()
+          }
+        }));
+      };
+
+      // Strict Face Verification comparing real enrolled biometric faceVector & enrolled camera person against target student
+      const handleFaceVerification = () => {
+        if (!targetStudentObj || !cameraPersonObj) return;
+
+        // 1. Check if the person who enrolled/stepped onto the camera differs from the target student
+        if (activeCameraSubjectId !== selectedStudent) {
+          setStatusMsg({
+            type: 'error',
+            text: `BIOMETRIC MISMATCH! Scanner target is ${targetStudentObj.name} (${targetStudentObj.roll}), but enrolled camera face belongs to ${cameraPersonObj.name} (${cameraPersonObj.roll}). Proxy blocked!`
+          });
+          setMismatchLogs((prev) => [
+            ...prev,
+            {
+              student: `Target: ${targetStudentObj.name} (${targetStudentObj.roll}) | Enrolled Camera Face: ${cameraPersonObj.name} (${cameraPersonObj.roll})`,
+              time: new Date().toLocaleTimeString()
+            }
+          ]);
+          return;
+        }
+
+        // 2. If a real webcam biometric vector was enrolled for this student, also verify live webcam frame similarity
+        if (targetStudentObj.faceVector && videoRef.current && videoRef.current.videoWidth > 0) {
+          const liveVec = computeImageBiometricVector(videoRef.current);
+          const similarity = computeCosineSimilarity(liveVec, targetStudentObj.faceVector);
+          if (similarity !== null && similarity < 0.82) {
+            setStatusMsg({
+              type: 'error',
+              text: `BIOMETRIC MISMATCH! Live camera face does not match ${targetStudentObj.name}'s enrolled biometric vector (Similarity: ${Math.round(
+                similarity * 100
+              )}%).`
+            });
+            setMismatchLogs((prev) => [
+              ...prev,
+              {
+                student: `Target: ${targetStudentObj.name} | Live Face Similarity Mismatch (${Math.round(similarity * 100)}%)`,
+                time: new Date().toLocaleTimeString()
+              }
+            ]);
+            return;
+          }
+        }
+
+        setStatusMsg({
+          type: 'success',
+          text: `Biometric Match Verified! Face matches ${targetStudentObj.name} (${targetStudentObj.roll}). Marked as Present!`
+        });
+        markStudentAttendance(selectedStudent, true, 'Faculty Face Recognition');
+      };
+
+      return (
+        <div className="space-y-6 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-white uppercase tracking-wider">Live Attendance Engine</h2>
+              <p className="text-slate-400">
+                Faculty: <strong className="text-indigo-400">{facultyUser.name}</strong> ({facultyUser.dept})
+              </p>
+            </div>
+            <div className="px-3 py-1.5 bg-[#070a12] border border-slate-800 rounded-xl text-emerald-400 font-mono font-bold flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Live Student QR & Face Sync Active
+            </div>
+          </div>
+
+          {/* Mode Filter Bar */}
+          <div className="grid grid-cols-3 gap-2 bg-[#0e1422] p-2 rounded-2xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setActiveMode('all')}
+              className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                activeMode === 'all' ? 'bg-[#5852f2] text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Layers className="w-4 h-4" /> All Modes
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMode('face')}
+              className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                activeMode === 'face' ? 'bg-[#5852f2] text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Video className="w-4 h-4 text-emerald-400" /> Face Recognition
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMode('manual')}
+              className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                activeMode === 'manual' ? 'bg-[#5852f2] text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <UserCheck className="w-4 h-4 text-cyan-400" /> Live Roster & Student QR Status
+            </button>
+          </div>
+
+          {/* Live Single Selected Student Unique QR Code Panel (Faculty Dashboard) */}
+          <div className="bg-[#0e1422] border border-indigo-500/30 rounded-2xl p-6 space-y-4 max-w-2xl mx-auto">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-indigo-400" /> Student-Specific Live QR Code ({facultyUser.name})
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Select a student name below to display only that particular student's unique QR code
+                </p>
+              </div>
+              <div className="px-3 py-1 bg-indigo-950 border border-indigo-800 rounded-xl text-[11px] font-mono text-indigo-300 flex items-center gap-2">
+                <span>Session: <strong>{sessionToken}</strong></span>
+                <span className="px-2 py-0.5 bg-indigo-600 text-white rounded-md font-bold">{qrCountdown}s</span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-slate-400 text-[11px] font-semibold">Select Student Name to Display Unique QR Code:</label>
+              <select
+                value={activeQrOwnerId}
+                onChange={(e) => {
+                  setActiveQrOwnerId(e.target.value);
+                  setSelectedStudent(e.target.value);
+                  setStatusMsg(null);
+                }}
+                className="w-full p-2.5 bg-[#070a12] border border-slate-800 rounded-xl text-white font-semibold"
+              >
+                {students.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.roll})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {qrSelectedStudentObj && (
+              <div className="p-6 rounded-2xl bg-[#070a12] border border-indigo-500/50 shadow-lg shadow-indigo-600/15 flex flex-col items-center text-center space-y-3">
+                <div className="px-3 py-1 bg-slate-900 border border-slate-800 rounded-xl text-xs font-semibold text-cyan-300">
+                  Faculty: {facultyUser.name} ({facultyUser.subject || 'PWP'})
+                </div>
+
+                <div>
+                  <div className="font-bold text-white text-sm">{qrSelectedStudentObj.name}</div>
+                  <div className="text-[11px] font-mono text-indigo-400">Roll No: {qrSelectedStudentObj.roll}</div>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-2xl shadow-lg border-4 border-indigo-500/30">
+                  <UniqueStudentQrMatrix value={activeUniqueQrCode} size={156} />
+                </div>
+
+                <div className="text-[11px] font-mono text-slate-300 bg-slate-900 border border-slate-800 px-3 py-1 rounded-lg">
+                  {activeUniqueQrCode}
+                </div>
+
+                {studentSessionMarks[qrSelectedStudentObj.id]?.status === 'Marked as Present' ? (
+                  <span className="px-3 py-1 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded-xl text-xs font-bold">
+                    ✓ Marked as Present ({studentSessionMarks[qrSelectedStudentObj.id].source})
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 bg-amber-950/70 text-amber-300 border border-amber-800/70 rounded-xl text-[11px] font-semibold">
+                    Awaiting {qrSelectedStudentObj.name.split(' ')[0]}'s Student Portal QR Scan...
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* AI Face Recognition Camera Scanner */}
+          {(activeMode === 'all' || activeMode === 'face') && (
+            <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-6 space-y-4 max-w-2xl mx-auto">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-white text-xs">AI Face Scanner Engine ({facultyUser.name})</span>
+                <span className="px-2.5 py-1 bg-amber-950 border border-amber-800 text-amber-300 rounded-lg text-[10px] font-bold">
+                  Target: {targetStudentObj?.roll}
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-400 text-[11px]">Target Student for Face Verification:</label>
+                <select
+                  value={selectedStudent}
+                  onChange={(e) => {
+                    setSelectedStudent(e.target.value);
+                    setStatusMsg(null);
+                  }}
+                  className="w-full p-2.5 bg-[#070a12] border border-slate-800 rounded-xl text-white font-semibold"
+                >
+                  {students.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.roll})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="relative aspect-video bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-center overflow-hidden">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+                />
+                {targetStudentObj?.photo && (
+                  <div className="absolute top-3 left-3 bg-slate-900/90 border border-slate-700 p-1.5 rounded-xl flex items-center gap-2">
+                    <img src={targetStudentObj.photo} alt="Ref" className="w-8 h-8 rounded-lg object-cover border border-indigo-500" />
+                    <div className="text-[10px] leading-tight">
+                      <div className="text-slate-400">Target Ref</div>
+                      <div className="font-bold text-white">{targetStudentObj.name.split(' ')[0]}</div>
+                    </div>
+                  </div>
+                )}
+                {cameraPersonObj?.photo && (
+                  <div className="absolute top-3 right-3 bg-slate-900/90 border border-emerald-700/70 p-1.5 rounded-xl flex items-center gap-2">
+                    <img src={cameraPersonObj.photo} alt="Live" className="w-8 h-8 rounded-lg object-cover border border-emerald-500" />
+                    <div className="text-[10px] leading-tight">
+                      <div className="text-emerald-400">On Camera</div>
+                      <div className="font-bold text-white">{cameraPersonObj.name.split(' ')[0]}</div>
+                    </div>
+                  </div>
+                )}
+                <div className="absolute bottom-3 right-3 flex items-center gap-1.5 z-10">
+                  <button
+                    type="button"
+                    onClick={() => setFacingMode('user')}
+                    className={`px-2.5 py-1.5 border rounded-xl text-[10px] font-bold cursor-pointer ${
+                      facingMode === 'user'
+                        ? 'bg-indigo-600 border-indigo-400 text-white'
+                        : 'bg-slate-900/85 border-slate-700 text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    Front Cam
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFacingMode('environment')}
+                    className={`px-2.5 py-1.5 border rounded-xl text-[10px] font-bold cursor-pointer ${
+                      facingMode === 'environment'
+                        ? 'bg-indigo-600 border-indigo-400 text-white'
+                        : 'bg-slate-900/85 border-slate-700 text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    Back Cam
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-400 text-[11px]">Person Enrolled / Physically In Front of Camera:</label>
+                <select
+                  value={activeCameraSubjectId}
+                  onChange={(e) => {
+                    setActiveCameraSubjectId(e.target.value);
+                    setStatusMsg(null);
+                  }}
+                  className="w-full p-2.5 bg-[#070a12] border border-slate-800 rounded-xl text-white font-semibold"
+                >
+                  {students.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.roll}) {s.id === selectedStudent ? '— [Matches Target Student]' : '— [Different Student / Mismatch]'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {statusMsg && (
+                <div
+                  className={`p-3 rounded-xl border text-xs font-bold flex items-start gap-2 ${
+                    statusMsg.type === 'success'
+                      ? 'bg-emerald-950/90 border-emerald-800 text-emerald-300'
+                      : 'bg-red-950/90 border-red-800 text-red-300'
+                  }`}
+                >
+                  {statusMsg.type === 'success' ? (
+                    <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  )}
+                  <span>{statusMsg.text}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleFaceVerification}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer"
+              >
+                <Camera className="w-4 h-4" /> Scan & Verify Biometric Match
+              </button>
+            </div>
+          )}
+
+          {/* Live Class Roster (Shows Real-Time Student Portal QR Scans as Marked as Present) */}
+          {(activeMode === 'all' || activeMode === 'manual') && (
+            <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-cyan-400" /> Live Class Roster & Student Portal QR Scans ({facultyUser.subject || 'PWP'})
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Automatically updates to "Marked as Present" when a student scans their unique QR code in their Student Portal
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => students.forEach((s) => markStudentAttendance(s.id, true, 'Faculty Bulk Present'))}
+                  className="px-3 py-1.5 bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 font-bold rounded-xl text-[11px] cursor-pointer"
+                >
+                  Mark All Present
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#06080e] text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">STUDENT</th>
+                      <th className="p-3">ROLL NO</th>
+                      <th className="p-3">CURRENT {facultyUser.subject || 'PWP'} %</th>
+                      <th className="p-3">LIVE ATTENDANCE STATUS</th>
+                      <th className="p-3 text-right">MANUAL OVERRIDE</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {students.map((s) => {
+                      const subj = facultyUser.subject || 'PWP';
+                      const rec = attendance[s.id]?.[subj] || { present: 0, total: 0 };
+                      const pct = rec.total > 0 ? Math.round((rec.present / rec.total) * 100) : 100;
+                      const sessionRecord = studentSessionMarks[s.id];
+
+                      return (
+                        <tr key={s.id} className="hover:bg-slate-800/20">
+                          <td className="p-3 flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-800 overflow-hidden border border-slate-700 flex items-center justify-center font-bold text-slate-300">
+                              {s.photo ? <img src={s.photo} alt={s.name} className="w-full h-full object-cover" /> : s.name.charAt(0)}
+                            </div>
+                            <span className="font-semibold text-white">{s.name}</span>
+                          </td>
+                          <td className="p-3 font-mono text-slate-400">{s.roll}</td>
+                          <td className="p-3 font-mono">
+                            <span className={`font-bold ${pct < 75 ? 'text-red-400' : 'text-emerald-400'}`}>{pct}%</span>{' '}
+                            <span className="text-slate-500">
+                              ({rec.present}/{rec.total})
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            {sessionRecord ? (
+                              <div className="space-y-0.5">
+                                <span
+                                  className={`px-2.5 py-0.5 rounded text-[10px] font-bold inline-block ${
+                                    sessionRecord.status === 'Marked as Present'
+                                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                      : 'bg-red-950 text-red-400 border border-red-800'
+                                  }`}
+                                >
+                                  {sessionRecord.status.toUpperCase()}
+                                </span>
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  via {sessionRecord.source} ({sessionRecord.time})
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 text-[11px]">Awaiting Student QR Scan</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="inline-flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => markStudentAttendance(s.id, true, 'Faculty Manual Roster')}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[11px] cursor-pointer"
+                              >
+                                Present
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => markStudentAttendance(s.id, false, 'Faculty Manual Roster')}
+                                className="px-3 py-1.5 bg-red-600/80 hover:bg-red-600 text-white font-bold rounded-lg text-[11px] cursor-pointer"
+                              >
+                                Absent
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function FacultyUpdatesManager({ facultyUser, campusUpdates, setCampusUpdates }) {
+      const [category, setCategory] = useState('Assignment');
+      const [subject, setSubject] = useState(facultyUser.subject || 'PWP');
+      const [title, setTitle] = useState('');
+      const [date, setDate] = useState('2026-11-20');
+      const [details, setDetails] = useState('');
+
+      const handlePublish = (e) => {
+        e.preventDefault();
+        if (!title.trim()) return;
+        const newEntry = {
+          id: 'UPD-' + Math.floor(100 + Math.random() * 900),
+          category,
+          subject: category === 'Holiday' ? 'ALL' : subject,
+          title: title.trim(),
+          date,
+          details: details.trim() || 'Published by ' + facultyUser.name,
+          postedBy: facultyUser.name
+        };
+        setCampusUpdates([newEntry, ...campusUpdates]);
+        setTitle('');
+        setDetails('');
+      };
+
+      const handleDeleteUpdate = (id) => {
+        setCampusUpdates((prev) => prev.filter((item) => item.id !== id));
+      };
+
+      return (
+        <div className="space-y-6 text-xs">
+          <div>
+            <h2 className="text-base font-bold text-white uppercase tracking-wider">Assignments, Holidays & Campus Events</h2>
+            <p className="text-slate-400">Publish new assignments, university holidays, or ICT events directly to the Student Dashboard</p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <form onSubmit={handlePublish} className="bg-[#0e1422] border border-slate-800 rounded-2xl p-6 space-y-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Plus className="w-4 h-4 text-indigo-400" /> Add New Student Update
+              </h3>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Update Category</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full p-2.5 bg-[#070a12] border border-slate-800 rounded-xl text-white font-semibold"
+                  >
+                    <option value="Assignment">Assignment</option>
+                    <option value="Holiday">Holiday</option>
+                    <option value="Event">Campus / Dept Event</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Subject / Scope</label>
+                  <select
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    disabled={category === 'Holiday'}
+                    className="w-full p-2.5 bg-[#070a12] border border-slate-800 rounded-xl text-white font-semibold disabled:opacity-50"
+                  >
+                    <option value="PWP">PWP</option>
+                    <option value="DMGT">DMGT</option>
+                    <option value="COA">COA</option>
+                    <option value="DSC">DSC</option>
+                    <option value="ICT Dept">ICT Department</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Title</label>
+                <input
+                  type="text"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g., Unit 4 Graph Theory Problem Set / TechFest 2026"
+                  className="w-full p-3 bg-[#070a12] border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Date / Due Date</label>
+                <input
+                  type="date"
+                  required
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full p-3 bg-[#070a12] border border-slate-800 rounded-xl text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Description & Instructions</label>
+                <textarea
+                  rows="3"
+                  value={details}
+                  onChange={(e) => setDetails(e.target.value)}
+                  placeholder="Enter instructions, venue, or holiday notice details..."
+                  className="w-full p-3 bg-[#070a12] border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-[#5852f2] hover:bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/30 cursor-pointer"
+              >
+                Publish to Student Dashboard
+              </button>
+            </form>
+
+            <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-6 space-y-3">
+              <h3 className="text-sm font-bold text-white">Published Items ({campusUpdates.length})</h3>
+              <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+                {campusUpdates.map((item) => (
+                  <div key={item.id} className="p-3.5 bg-[#070a12] border border-slate-800 rounded-xl flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            item.category === 'Assignment'
+                              ? 'bg-indigo-950 text-indigo-300 border border-indigo-800'
+                              : item.category === 'Holiday'
+                              ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                              : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                          }`}
+                        >
+                          {item.category.toUpperCase()}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">{item.date}</span>
+                      </div>
+                      <div className="font-bold text-white text-xs">{item.title}</div>
+                      <p className="text-[11px] text-slate-400">{item.details}</p>
+                      <div className="text-[10px] text-slate-500">Posted by {item.postedBy}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteUpdate(item.id)}
+                      className="p-1.5 bg-red-950/70 hover:bg-red-900 border border-red-800/80 text-red-300 rounded-lg cursor-pointer"
+                      title="Remove item"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function FacultyGradeEntry({ users, results, setResults }) {
+      return (
+        <div className="space-y-4 text-xs">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">Grade & Result Entry</h2>
+          <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-4">
+            <table className="w-full text-left">
+              <thead className="bg-[#06080e] text-slate-400">
+                <tr>
+                  <th className="p-3">STUDENT</th>
+                  <th className="p-3">SGPA (SEM 3)</th>
+                  <th className="p-3">CGPA</th>
+                  <th className="p-3">ACTIVE BACKLOGS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {users
+                  .filter((u) => u.role === 'student')
+                  .map((s) => (
+                    <tr key={s.id}>
+                      <td className="p-3 font-semibold text-white">{s.name}</td>
+                      <td className="p-3 font-mono text-cyan-400">{results[s.id]?.sgpa['Sem 3'] || '8.5'}</td>
+                      <td className="p-3 font-mono text-emerald-400">{results[s.id]?.cgpa || '8.50'}</td>
+                      <td className="p-3 font-mono text-amber-400">{results[s.id]?.backlogs ?? 0}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    function FacultyLiveQuizPoll() {
+      return (
+        <div className="space-y-4 text-xs max-w-md">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">Live Class 1-Min Quiz Runner</h2>
+          <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl space-y-3">
+            <div className="font-bold text-white">Active Question: What is the time complexity of searching in a Binary Search Tree?</div>
+            <button type="button" className="w-full py-2 bg-[#5852f2] text-white font-bold rounded-xl cursor-pointer">
+              Launch 60s Live Poll
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    function FacultyPlagiarismCheck() {
+      return (
+        <div className="space-y-4 text-xs">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">Assignment Plagiarism & Similarity Checker</h2>
+          <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-4 space-y-2">
+            <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center">
+              <div>
+                <div className="font-bold text-white">Django REST API Microservices</div>
+                <div className="text-[11px] text-slate-400">38 Student Submissions Processed</div>
+              </div>
+              <span className="px-2.5 py-1 bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono rounded-lg">12% Low Risk</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function FacultyMassAlerts({ attendance, users }) {
+      return (
+        <div className="space-y-4 text-xs">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">Low Attendance Mass Alerts</h2>
+          <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-4">
+            <button type="button" className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl cursor-pointer">
+              Send Alert Reminders to All Defaulters (&lt;75%)
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 5. STUDENT PORTAL COMPONENTS
+    // ==========================================
+    function StudentDashboardOverview({ studentUser, attendance, results, campusUpdates, studentSessionMarks, onNavigate }) {
+      const subjects = attendance
+        ? Object.entries(attendance)
+        : [
+            ['PWP', { present: 28, total: 30 }],
+            ['DMGT', { present: 25, total: 28 }],
+            ['COA', { present: 26, total: 26 }],
+            ['DSC', { present: 24, total: 27 }]
+          ];
+
+      const totalPresent = subjects.reduce((acc, [, d]) => acc + d.present, 0);
+      const totalSessions = subjects.reduce((acc, [, d]) => acc + d.total, 0);
+      const overallPct = totalSessions > 0 ? Math.round((totalPresent / totalSessions) * 1000) / 10 : 100;
+      const safeMisses = Math.max(0, Math.floor(totalPresent / 0.75 - totalSessions));
+      const requiredClasses = overallPct < 75 ? Math.ceil((0.75 * totalSessions - totalPresent) / 0.25) : 0;
+
+      const assignmentCount = campusUpdates.filter((u) => u.category === 'Assignment').length;
+      const holidayEventCount = campusUpdates.filter((u) => u.category !== 'Assignment').length;
+
+      return (
+        <div className="space-y-6 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-white uppercase tracking-wider">Student Dashboard</h2>
+              <p className="text-slate-400">
+                Welcome back, <strong className="text-white">{studentUser.name}</strong> ({studentUser.roll} • {studentUser.dept})
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('scan')}
+              className="px-4 py-2 bg-[#5852f2] hover:bg-indigo-600 text-white font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer"
+            >
+              <QrCode className="w-4 h-4" /> Scan Live Faculty QR
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl">
+              <div className="text-slate-400 font-semibold">Overall Attendance</div>
+              <div className={`text-2xl font-extrabold mt-1 ${overallPct < 75 ? 'text-red-400' : 'text-emerald-400'}`}>
+                {overallPct}%
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                {totalPresent} / {totalSessions} Sessions Attended
+              </div>
+            </div>
+
+            <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl">
+              <div className="text-slate-400 font-semibold">Current CGPA</div>
+              <div className="text-2xl font-extrabold text-cyan-400 mt-1">{results?.cgpa || '8.63'}</div>
+              <div className="text-[10px] text-slate-500 mt-1">Active Backlogs: {results?.backlogs ?? 0}</div>
+            </div>
+
+            <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl">
+              <div className="text-slate-400 font-semibold">Pending Assignments</div>
+              <div className="text-2xl font-extrabold text-indigo-400 mt-1">{assignmentCount}</div>
+              <button
+                type="button"
+                onClick={() => onNavigate('assignments')}
+                className="text-[10px] text-indigo-300 hover:underline mt-1 cursor-pointer"
+              >
+                Open Assignments Hub →
+              </button>
+            </div>
+
+            <div className="bg-[#0e1422] border border-slate-800 p-4 rounded-2xl">
+              <div className="text-slate-400 font-semibold">Holidays & Events</div>
+              <div className="text-2xl font-extrabold text-amber-400 mt-1">{holidayEventCount}</div>
+              <button
+                type="button"
+                onClick={() => onNavigate('holidays-events')}
+                className="text-[10px] text-amber-300 hover:underline mt-1 cursor-pointer"
+              >
+                View Calendar Notices →
+              </button>
+            </div>
+          </div>
+
+          <div
+            className={`p-4 rounded-2xl border flex items-center justify-between gap-3 ${
+              overallPct >= 75
+                ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
+                : 'bg-red-950/40 border-red-800/80 text-red-300'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-5 h-5 shrink-0" />
+              <div>
+                <div className="font-bold">AI Attendance Defaulter Guard</div>
+                <div className="text-[11px] opacity-90">
+                  {overallPct >= 75
+                    ? `Safe Zone: You can safely miss ${safeMisses} more sessions while staying above the mandatory 75% threshold.`
+                    : `Defaulter Warning: Attend the next ${requiredClasses} consecutive classes to recover above 75%.`}
+                </div>
+              </div>
+            </div>
+            {studentSessionMarks[studentUser.id]?.status === 'Marked as Present' && (
+              <span className="px-3 py-1 bg-emerald-600 text-white font-bold rounded-xl text-[10px] shrink-0">
+                Today's Session: PRESENT
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-5 space-y-3">
+              <h3 className="text-sm font-bold text-white">Subject-Wise Attendance</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {subjects.map(([subj, data]) => {
+                  const pct = data.total > 0 ? Math.round((data.present / data.total) * 100) : 100;
+                  return (
+                    <div key={subj} className="p-3.5 bg-[#070a12] border border-slate-800 rounded-xl flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-white">{subj}</div>
+                        <div className="text-[11px] text-slate-400">
+                          {data.present} / {data.total} Sessions
+                        </div>
+                      </div>
+                      <span className={`text-sm font-extrabold font-mono ${pct < 75 ? 'text-red-400' : 'text-cyan-400'}`}>
+                        {pct}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">Latest Faculty Updates</h3>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('holidays-events')}
+                  className="text-[11px] text-indigo-400 hover:underline cursor-pointer"
+                >
+                  View All
+                </button>
+              </div>
+              <div className="space-y-2.5">
+                {campusUpdates.slice(0, 3).map((item) => (
+                  <div key={item.id} className="p-3 bg-[#070a12] border border-slate-800 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-indigo-300 uppercase">{item.category}</span>
+                      <span className="text-[10px] font-mono text-slate-500">{item.date}</span>
+                    </div>
+                    <div className="font-bold text-white">{item.title}</div>
+                    <div className="text-[10px] text-slate-400">By {item.postedBy}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function StudentQrScanner({
+      studentUser,
+      users,
+      sessionToken,
+      qrCountdown,
+      attendance,
+      setAttendance,
+      setMismatchLogs,
+      activeQrOwnerId,
+      setStudentSessionMarks
+    }) {
+      const [selectedSubject, setSelectedSubject] = useState('PWP');
+      const [scanResult, setScanResult] = useState(null);
+      const [facingMode, setFacingMode] = useState('environment');
+      const videoRef = useRef(null);
+
+      const students = users.filter((u) => u.role === 'student');
+      const activeFaculty = users.find((u) => u.role === 'faculty' && u.subject === selectedSubject) || users.find((u) => u.role === 'faculty');
+      const qrOwnerObj = students.find((u) => u.id === activeQrOwnerId) || studentUser;
+      const myUniqueQrCode = `${sessionToken}-${studentUser.roll}`;
+      const scannedQrCode = `${sessionToken}-${qrOwnerObj.roll}`;
+
+      useEffect(() => {
+        setScanResult(null);
+      }, [studentUser.id]);
+
+      useEffect(() => {
+        let stream = null;
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices
+            .getUserMedia({ video: { facingMode: { ideal: facingMode } } })
+            .then((s) => {
+              stream = s;
+              if (videoRef.current) videoRef.current.srcObject = s;
+            })
+            .catch(() => {
+              navigator.mediaDevices
+                .getUserMedia({ video: true })
+                .then((s) => {
+                  stream = s;
+                  if (videoRef.current) videoRef.current.srcObject = s;
+                })
+                .catch(() => {});
+            });
+        }
+
+        return () => stream?.getTracks().forEach((t) => t.stop());
+      }, [facingMode]);
+
+      const recordStudentPresent = () => {
+        setAttendance((prev) => {
+          const stu = prev[studentUser.id] || { [selectedSubject]: { present: 0, total: 0 } };
+          const sub = stu[selectedSubject] || { present: 0, total: 0 };
+          return {
+            ...prev,
+            [studentUser.id]: {
+              ...stu,
+              [selectedSubject]: {
+                present: sub.present + 1,
+                total: sub.total + 1
+              }
+            }
+          };
+        });
+
+        setStudentSessionMarks((prev) => ({
+          ...prev,
+          [studentUser.id]: {
+            status: 'Marked as Present',
+            source: `Student Portal QR (${selectedSubject})`,
+            time: new Date().toLocaleTimeString()
+          }
+        }));
+      };
+
+      // Scans the live QR code currently displayed by Faculty on the Faculty Dashboard
+      const handleUniqueQrScan = () => {
+        if (activeQrOwnerId !== studentUser.id) {
+          setScanResult({
+            type: 'error',
+            title: 'Mismatch QR Code',
+            text: `Mismatch QR Code! You scanned ${qrOwnerObj.name}'s (${qrOwnerObj.roll}) QR code from ${studentUser.name}'s (${studentUser.roll}) portal. Attendance rejected!`
+          });
+          setMismatchLogs((prev) => [
+            ...prev,
+            {
+              student: `QR Mismatch: ${studentUser.name} (${studentUser.roll}) scanned ${qrOwnerObj.name}'s QR (${scannedQrCode})`,
+              time: new Date().toLocaleTimeString()
+            }
+          ]);
+          return;
+        }
+
+        recordStudentPresent();
+        setScanResult({
+          type: 'success',
+          title: 'Marked as Present!',
+          text: `QR Code Verified (${myUniqueQrCode})! ${studentUser.name} is now Marked as Present in ${activeFaculty?.name || 'Faculty'}'s Dashboard for ${selectedSubject}.`
+        });
+      };
+
+      return (
+        <div className="space-y-6 text-xs max-w-md mx-auto">
+          <div className="text-center">
+            <h2 className="text-base font-bold text-white uppercase tracking-wider">Scan Faculty Live QR Code</h2>
+            <p className="text-slate-400 mt-0.5">
+              Point your camera at the Faculty's screen to scan your assigned QR code
+            </p>
+          </div>
+
+          <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between bg-[#070a12] border border-slate-800 p-3 rounded-xl text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-600/30 border border-indigo-500/40 overflow-hidden flex items-center justify-center font-bold text-indigo-300">
+                  {studentUser.photo ? (
+                    <img src={studentUser.photo} alt={studentUser.name} className="w-full h-full object-cover" />
+                  ) : (
+                    studentUser.name.charAt(0)
+                  )}
+                </div>
+                <div>
+                  <div className="font-bold text-white text-xs">{studentUser.name}</div>
+                  <div className="text-[10px] font-mono text-slate-400">Roll: {studentUser.roll}</div>
+                </div>
+              </div>
+              <span className="px-2 py-1 bg-indigo-950 border border-indigo-800 text-indigo-300 rounded-lg text-[10px] font-bold">
+                QR Scanner
+              </span>
+            </div>
+
+            <div className="text-left">
+              <label className="text-slate-400 text-[10px] block mb-1">Active Subject & Faculty:</label>
+              <select
+                value={selectedSubject}
+                onChange={(e) => {
+                  setSelectedSubject(e.target.value);
+                  setScanResult(null);
+                }}
+                className="w-full p-2.5 bg-[#070a12] border border-slate-800 rounded-xl text-white font-semibold"
+              >
+                <option value="PWP">PWP — Prof. R. K. Sharma / Kawal Kaur</option>
+                <option value="DMGT">DMGT — Prof. Biswajit</option>
+                <option value="COA">COA — Prof. Vijay Dubey</option>
+                <option value="DSC">DSC — Prof. Alam</option>
+              </select>
+            </div>
+
+            <div className="relative aspect-video bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden flex items-center justify-center">
+              {!scanResult ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+                  />
+                  <div className="absolute inset-6 border-2 border-dashed border-indigo-500 rounded-2xl pointer-events-none animate-pulse" />
+                  <div className="absolute top-3 left-3 px-2.5 py-1 bg-slate-900/90 border border-slate-700 rounded-lg text-[10px] font-mono text-indigo-300">
+                    {activeFaculty?.name || 'Faculty'} QR ({qrCountdown}s)
+                  </div>
+                  <div className="absolute bottom-3 right-3 flex items-center gap-1.5 z-10">
+                    <button
+                      type="button"
+                      onClick={() => setFacingMode('user')}
+                      className={`px-2.5 py-1.5 border rounded-xl text-[10px] font-bold cursor-pointer ${
+                        facingMode === 'user'
+                          ? 'bg-indigo-600 border-indigo-400 text-white'
+                          : 'bg-slate-900/85 border-slate-700 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      Front Cam
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFacingMode('environment')}
+                      className={`px-2.5 py-1.5 border rounded-xl text-[10px] font-bold cursor-pointer ${
+                        facingMode === 'environment'
+                          ? 'bg-indigo-600 border-indigo-400 text-white'
+                          : 'bg-slate-900/85 border-slate-700 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      Back Cam
+                    </button>
+                  </div>
+                </>
+              ) : scanResult.type === 'success' ? (
+                <div className="p-4 flex flex-col items-center gap-2 text-emerald-400 font-bold">
+                  <CheckCircle className="w-12 h-12" />
+                  <span className="text-sm">{scanResult.title}</span>
+                  <span className="text-[11px] text-slate-300 font-normal leading-relaxed">{scanResult.text}</span>
+                </div>
+              ) : (
+                <div className="p-4 flex flex-col items-center gap-2 text-red-400 font-bold">
+                  <AlertTriangle className="w-12 h-12" />
+                  <span className="text-sm">{scanResult.title}</span>
+                  <span className="text-[11px] text-red-200 font-normal leading-relaxed">{scanResult.text}</span>
+                </div>
+              )}
+            </div>
+
+            {!scanResult ? (
+              <button
+                type="button"
+                onClick={handleUniqueQrScan}
+                className="w-full py-3 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 cursor-pointer"
+              >
+                <QrCode className="w-4 h-4" /> Scan Faculty QR Code
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setScanResult(null)}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl cursor-pointer"
+              >
+                Reset & Scan Again
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function StudentTimetableSchedule({ users }) {
+      const f1 = users.find((u) => u.id === 'FAC01')?.name || 'Prof. Kawal Kaur';
+      const f2 = users.find((u) => u.id === 'FAC02')?.name || 'Prof. Biswajit';
+      const f3 = users.find((u) => u.id === 'FAC03')?.name || 'Prof. Vijay Dubey';
+      const f4 = users.find((u) => u.id === 'FAC04')?.name || 'Prof. Alam';
+
+      const schedule = [
+        { time: '09:00 AM - 10:00 AM', subject: 'PWP (Python Web Programming)', faculty: f1, room: 'Lab ICT 301', type: 'Lab' },
+        { time: '10:00 AM - 11:00 AM', subject: 'DMGT (Discrete Math & Graph Theory)', faculty: f2, room: 'Hall ICT 204', type: 'Lecture' },
+        { time: '11:15 AM - 12:15 PM', subject: 'COA (Computer Organization & Arch)', faculty: f3, room: 'Hall ICT 204', type: 'Lecture' },
+        { time: '01:00 PM - 02:00 PM', subject: 'DSC (Data Structures in C)', faculty: f4, room: 'Lab ICT 302', type: 'Lab' }
+      ];
+
+      return (
+        <div className="space-y-4 text-xs">
+          <div>
+            <h2 className="text-base font-bold text-white uppercase tracking-wider">Timetable & Schedule</h2>
+            <p className="text-slate-400">Daily ICT Sem 3 class slots, assigned faculty, and laboratory rooms</p>
+          </div>
+          <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-4 space-y-2.5">
+            {schedule.map((slot, i) => (
+              <div key={i} className="p-3.5 bg-[#070a12] border border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="font-mono text-indigo-400 font-bold text-[11px]">{slot.time}</div>
+                  <div className="font-bold text-white text-sm mt-0.5">{slot.subject}</div>
+                  <div className="text-slate-400 text-[11px]">{slot.faculty}</div>
+                </div>
+                <div className="text-right">
+                  <span className="px-2.5 py-1 bg-slate-900 border border-slate-700 rounded-lg font-mono text-cyan-300 font-semibold">
+                    {slot.room}
+                  </span>
+                  <div className="text-[10px] text-slate-500 mt-1">{slot.type}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function StudentAssignmentsHub({ campusUpdates }) {
+      const [submittedIds, setSubmittedIds] = useState({});
+      const assignments = campusUpdates.filter((u) => u.category === 'Assignment');
+
+      return (
+        <div className="space-y-4 text-xs">
+          <div>
+            <h2 className="text-base font-bold text-white uppercase tracking-wider">Assignments Hub</h2>
+            <p className="text-slate-400">Live coursework and lab assignments published by faculty</p>
+          </div>
+          <div className="space-y-3">
+            {assignments.length === 0 && (
+              <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-6 text-slate-400">
+                No active assignments published by faculty yet.
+              </div>
+            )}
+            {assignments.map((a) => {
+              const isSubmitted = !!submittedIds[a.id];
+              return (
+                <div key={a.id} className="bg-[#0e1422] border border-slate-800 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-1 max-w-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 bg-indigo-950 border border-indigo-800 text-indigo-300 rounded font-bold text-[10px]">
+                        {a.subject}
+                      </span>
+                      <span className="text-slate-400 font-mono text-[11px]">Due: {a.date}</span>
+                    </div>
+                    <div className="font-bold text-white text-sm">{a.title}</div>
+                    <p className="text-slate-400 text-[11px]">{a.details}</p>
+                    <div className="text-[10px] text-slate-500">Assigned by {a.postedBy}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSubmittedIds((prev) => ({ ...prev, [a.id]: true }))}
+                    className={`px-4 py-2 rounded-xl font-bold cursor-pointer ${
+                      isSubmitted
+                        ? 'bg-emerald-950 border border-emerald-800 text-emerald-400'
+                        : 'bg-[#5852f2] hover:bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                    }`}
+                  >
+                    {isSubmitted ? '✓ Submitted' : 'Submit Work'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function StudentResultsTranscript({ studentUser, results }) {
+      const [downloaded, setDownloaded] = useState(false);
+      return (
+        <div className="space-y-4 text-xs">
+          <h2 className="text-base font-bold text-white uppercase tracking-wider">Results & Transcript (Sem 3)</h2>
+          <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <div className="text-lg font-extrabold text-white">CGPA: {results?.cgpa || '8.63'}</div>
+                <div className="text-slate-400">
+                  Student: {studentUser.name} ({studentUser.roll}) • Active Backlogs: {results?.backlogs ?? 0}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDownloaded(true)}
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" /> {downloaded ? 'Transcript Saved' : 'Download Transcript'}
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center font-mono">
+              {results &&
+                Object.entries(results.sgpa).map(([sem, val]) => (
+                  <div key={sem} className="bg-[#070a12] border border-slate-800 p-3 rounded-xl">
+                    <div className="text-[10px] text-slate-400">{sem}</div>
+                    <div className="font-bold text-cyan-400 text-base mt-0.5">{val}</div>
+                  </div>
+                ))}
+            </div>
+            {results?.subjects && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+                {Object.entries(results.subjects).map(([sub, grade]) => (
+                  <div key={sub} className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl flex justify-between items-center font-mono">
+                    <span className="text-slate-300 font-bold">{sub}</span>
+                    <span className="text-emerald-400 font-extrabold">{grade}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function StudentCurriculumProgress({ users }) {
+      const f1 = users.find((u) => u.id === 'FAC01')?.name || 'Prof. Kawal Kaur';
+      const f2 = users.find((u) => u.id === 'FAC02')?.name || 'Prof. Biswajit';
+      const f3 = users.find((u) => u.id === 'FAC03')?.name || 'Prof. Vijay Dubey';
+      const f4 = users.find((u) => u.id === 'FAC04')?.name || 'Prof. Alam';
+
+      const courses = [
+        { code: 'PWP', name: 'Python Web Programming', progress: 82, units: '4 / 5 Units Completed', faculty: f1 },
+        { code: 'DMGT', name: 'Discrete Math & Graph Theory', progress: 75, units: '3 / 4 Units Completed', faculty: f2 },
+        { code: 'COA', name: 'Computer Organization & Architecture', progress: 90, units: '4.5 / 5 Units Completed', faculty: f3 },
+        { code: 'DSC', name: 'Data Structures in C', progress: 80, units: '4 / 5 Units Completed', faculty: f4 }
+      ];
+
+      return (
+        <div className="space-y-4 text-xs">
+          <div>
+            <h2 className="text-base font-bold text-white uppercase tracking-wider">Curriculum Progress</h2>
+            <p className="text-slate-400">Real-time syllabus completion across ICT Semester 3 subjects</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {courses.map((c) => (
+              <div key={c.code} className="bg-[#0e1422] border border-slate-800 rounded-2xl p-5 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="font-bold text-white text-sm">
+                      {c.code} — {c.name}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      {c.faculty} • {c.units}
+                    </div>
+                  </div>
+                  <span className="font-mono font-extrabold text-indigo-400">{c.progress}%</span>
+                </div>
+                <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden">
+                  <div className="h-full bg-[#5852f2] rounded-full" style={{ width: `${c.progress}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function StudentHolidaysEvents({ campusUpdates }) {
+      const items = campusUpdates.filter((u) => u.category === 'Holiday' || u.category === 'Event');
+      return (
+        <div className="space-y-4 text-xs">
+          <div>
+            <h2 className="text-base font-bold text-white uppercase tracking-wider">Holidays & Events</h2>
+            <p className="text-slate-400">Official Marwadi University holidays, hackathons, and ICT events posted by faculty</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {items.length === 0 && (
+              <div className="bg-[#0e1422] border border-slate-800 rounded-2xl p-6 text-slate-400">
+                No upcoming holidays or events posted yet.
+              </div>
+            )}
+            {items.map((item) => (
+              <div key={item.id} className="bg-[#0e1422] border border-slate-800 rounded-2xl p-5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${
+                      item.category === 'Holiday'
+                        ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                        : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                    }`}
+                  >
+                    {item.category.toUpperCase()}
+                  </span>
+                  <span className="text-slate-400 font-mono text-[11px]">{item.date}</span>
+                </div>
+                <div className="font-bold text-white text-sm">{item.title}</div>
+                <p className="text-slate-400 text-[11px]">{item.details}</p>
+                <div className="text-[10px] text-slate-500 pt-1">Published by {item.postedBy}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
